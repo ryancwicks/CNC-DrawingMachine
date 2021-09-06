@@ -8,7 +8,6 @@ import curses.textpad
 import argparse
 
 parts = []
-parts_map = {}
 boards = []
 
 class PartPickerInterface:
@@ -140,9 +139,10 @@ class PartPickerInterface:
 
     def _show_part(self):
         global parts, boards, parts_map
-        current_part = parts[self._current_part-1]
-        current_board = boards[self._current_board-1]
+        current_part, board_id = parts[self._current_part-1]
+        current_board = boards[board_id]
         if self._is_part_running:
+            self._current_board = board_id
             self._status["Part Name"] = current_part.name
             self._status["Part Value"] = current_part.value
             self._status["Current Board"] = self._current_board
@@ -191,7 +191,7 @@ class PartPickerInterface:
                     if self._is_part_running:
                         self._current_part += 1
                         if self._current_part <= len(parts):
-                            current_part = parts[self._current_part-1]
+                            current_part, self._current_board = parts[self._current_part-1]
                             current_board = boards[self._current_board-1]
                             (x, y) = current_board.locate_part(current_part)
                             data = f"G1 X{x} Y{y} F{self.speed}\n"
@@ -224,7 +224,7 @@ class PartPickerInterface:
                     if self._is_part_running:
                         self._current_part -= 1
                         if self._current_part >= 1:
-                            current_part = parts[self._current_part-1]
+                            current_part, self._current_board = parts[self._current_part-1]
                             current_board = boards[self._current_board-1]
                             (x, y) = current_board.locate_part(current_part)
                             data = f"G1 X{x} Y{y} F{self.speed}\n"
@@ -280,9 +280,8 @@ class PartPickerInterface:
                         data = f"G1 X{x} Y{y} F{self.speed}\n"
                     elif cmd_name == "Start Part Place":
                         self._is_part_running = True
-                        self._current_board = 1
                         self._current_part = 1
-                        current_part = parts[self._current_part-1]
+                        current_part, self._current_board = parts[self._current_part-1]
                         current_board = boards[self._current_board-1]
                         (x, y) = current_board.locate_part(current_part)
                         data = f"G1 X{x} Y{y} F{self.speed}\n"
@@ -389,9 +388,20 @@ async def main_async():
     parts = load_pos_file(args.position_file, (args.xoff, args.yoff))
     parts.sort(key= lambda x: x.value)
 
+    parts_map = {}
     boards = []
-    for i in range(1, args.bx * args.by+1):
-        boards.append(Board(int(i / args.bx), int (i % args.bx)+1, args.width, args.height))
+    for i in range(0, args.bx * args.by):
+        boards.append(Board(int(i / args.bx)+1, int (i % args.bx)+1, args.width, args.height))
+        for part in parts:
+            if part.value not in parts_map:
+                parts_map[part.value] = [(part, i)]
+            else:
+                parts_map[part.value].append((part, i))
+
+    parts = []
+    for key, items in parts_map.items():
+        for item in items:
+            parts.append(item)
 
     from_queue = asyncio.Queue()
     to_queue = asyncio.Queue()
