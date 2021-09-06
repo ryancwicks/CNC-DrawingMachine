@@ -796,7 +796,7 @@ def csp_to_arc_distance(sp1,sp2, arc1, arc2, tolerance = 0.01 ): # arc = [start,
             t = float(j)/n
             p = csp_at_t(sp1,sp2,t) 
             d = min(point_to_arc_distance(p,arc1), point_to_arc_distance(p,arc2))
-            d1 = max(d1,d)
+            d1 = d1 if (d1[0] >= d[0]) else d
         n=n*2
     return d1[0]
 
@@ -1375,6 +1375,8 @@ class P:
         return P(self.x * other, self.y * other)
     __rmul__ = __mul__
     def __div__(self, other): return P(self.x / other, self.y / other)
+    def __floordiv__(self, other): return P(int(self.x / other), int(self.y / other))
+    def __truediv__(self, other): return P(self.x / other, self.y / other)
     def mag(self): return math.hypot(self.x, self.y)
     def unit(self):
         h = self.mag()
@@ -1856,7 +1858,7 @@ def biarc(sp1, sp2, z1, z2, depth=0):
         alpha =  (p2a - p0a) % (2*math.pi)                    
         if (p0a<p2a and  (p1a<p0a or p2a<p1a))    or    (p2a<p1a<p0a) : 
             alpha = -2*math.pi+alpha 
-        if abs(R.x)>1000000 or abs(R.y)>1000000  or (R-P0).mag<.1 :
+        if abs(R.x)>1000000 or abs(R.y)>1000000  or (R-P0).mag()<.1 :
             return None, None
         else :    
             return  R, alpha
@@ -2444,13 +2446,15 @@ class laser_gcode(inkex.Effect):
             
 
             ### Sort to reduce Rapid distance    
-            k = range(1,len(p))
+            k = list(range(1,len(p)))
             keys = [0]
             while len(k)>0:
                 end = p[keys[-1]][-1][1]
                 dist = None
                 for i in range(len(k)):
                     start = p[k[i]][0][1]
+                    if not dist:
+                        dist = ( -( ( end[0]-start[0])**2+(end[1]-start[1])**2 ) ,i)
                     dist = max(   ( -( ( end[0]-start[0])**2+(end[1]-start[1])**2 ) ,i)    ,   dist )
                 keys += [k[dist[1]]]
                 del k[dist[1]]
@@ -2686,7 +2690,7 @@ class laser_gcode(inkex.Effect):
         while (g!=root):
             if 'transform' in g.keys():
                 t = g.get('transform')
-                t = simpletransform.parseTransform(t)
+                t = simpletransform.Transform(t).matrix  #parseTransform(t)
                 trans = simpletransform.composeTransform(t,trans) if trans != [] else t
                 print_(trans)
             g=g.getparent()
@@ -2696,7 +2700,7 @@ class laser_gcode(inkex.Effect):
     def apply_transforms(self,g,csp):
         trans = self.get_transforms(g)
         if trans != []:
-            simpletransform.applyTransformToPath(trans, csp)
+            simpletransform.Path(csp).transform(trans)  #applyTransformToPath(trans, csp)
         return csp
 
 
@@ -2860,7 +2864,7 @@ class laser_gcode(inkex.Effect):
             items.reverse()
             for i in items:
                 if selected:
-                    self.selected[i.get("id")] = i
+                    self.svg.selected[i.get("id")] = i
                 if i.tag == inkex.addNS("g",'svg') and i.get(inkex.addNS('groupmode','inkscape')) == 'layer':
                     self.layers += [i]
                     recursive_search(i,i)
